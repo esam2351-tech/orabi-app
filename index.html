@@ -256,7 +256,7 @@
   <!-- ============ MENU LIST (المكونات) ============ -->
   <div class="screen" id="menuList">
     <div class="head"><div class="back js-go" data-go="home">→</div><h2>المكونات</h2>
-      <div class="icon-btn" id="menuSettingsBtn" title="إدارة الأصناف">⚙️</div>
+      <div class="icon-btn js-go" data-go="menuManage" id="menuSettingsBtn" title="إدارة الأصناف">⚙️</div>
     </div>
     <div class="wrap" style="padding-bottom:0;"><div class="field"><input id="menuSearch" placeholder="ابحث عن صنف..."></div></div>
     <div id="menuSandwichesBox"></div>
@@ -275,14 +275,18 @@
     </div>
   </div>
 
-  <!-- ============ SETTINGS ============ -->
-  <div class="screen" id="settings">
-    <div class="head"><div class="back js-go" data-go="home">→</div><h2>الإعدادات</h2></div>
-    <div class="settings-section">
-      <h3>إدارة الأصناف والمكونات</h3>
+  <!-- ============ MENU MANAGEMENT (إدارة الأصناف والمكونات) ============ -->
+  <div class="screen" id="menuManage">
+    <div class="head"><div class="back js-go" data-go="home">→</div><h2>إدارة الأصناف والمكونات</h2></div>
+    <div class="settings-section" style="margin-top:14px;">
       <div id="settingsMenuBox"></div>
       <button class="addline" id="addMenuItemBtn">+ إضافة صنف جديد</button>
     </div>
+  </div>
+
+  <!-- ============ SETTINGS ============ -->
+  <div class="screen" id="settings">
+    <div class="head"><div class="back js-go" data-go="home">→</div><h2>الإعدادات</h2></div>
     <div class="settings-section">
       <h3>حسابات الموظفين</h3>
       <div id="staffListBox"></div>
@@ -295,7 +299,7 @@
 
   <!-- ============ MENU ITEM EDIT (add/edit) ============ -->
   <div class="screen" id="menuEdit">
-    <div class="head"><div class="back js-go" data-go="settings">→</div><h2 id="menuEditTitle">صنف جديد</h2></div>
+    <div class="head"><div class="back js-go" data-go="menuManage">→</div><h2 id="menuEditTitle">صنف جديد</h2></div>
     <div class="wrap">
       <div class="card">
         <div class="field"><label>اسم الصنف</label><input id="me_name" placeholder="مثال: سندوتش شاورما لحمة"></div>
@@ -308,7 +312,7 @@
       </div>
     </div>
     <div class="btnrow">
-      <button class="btn ghost js-go" data-go="settings">إلغاء</button>
+      <button class="btn ghost js-go" data-go="menuManage">إلغاء</button>
       <button class="btn danger" id="me_deleteBtn" style="display:none;">حذف</button>
       <button class="btn primary" id="me_saveBtn">حفظ</button>
     </div>
@@ -598,7 +602,8 @@ function go(id){
   currentScreen = id;
   window.scrollTo(0,0);
   if(id==='menuList') renderMenuList();
-  if(id==='settings') renderSettings();
+  if(id==='menuManage') renderSettingsMenu();
+  if(id==='settings') renderSettingsStaff();
   if(id==='feedback') renderFeedbackForm();
   if(id==='complaintsHome') renderComplaintsList();
   if(id==='feedbackReport') renderFeedbackReport();
@@ -635,7 +640,7 @@ function subscribeRestaurantData(){
   unsubscribers.forEach(u=>{ try{u();}catch(e){} });
   unsubscribers = [subscribeShared('staff', list=>{ APP_STATE.staff = list; if(currentScreen==='settings') renderSettingsStaff(); })];
   APP_STATE.menu = []; APP_STATE.feedback = []; APP_STATE.complaints = [];
-  unsubscribers.push(subscribeShared(rKey('menu'), list=>{ APP_STATE.menu = list; if(currentScreen==='menuList') renderMenuList(); if(currentScreen==='settings') renderSettingsMenu(); if(currentScreen==='feedback') renderFeedbackForm(); }));
+  unsubscribers.push(subscribeShared(rKey('menu'), list=>{ APP_STATE.menu = list; if(currentScreen==='menuList') renderMenuList(); if(currentScreen==='menuManage') renderSettingsMenu(); if(currentScreen==='feedback') renderFeedbackForm(); }));
   unsubscribers.push(subscribeShared(rKey('feedback'), list=>{ APP_STATE.feedback = list; if(currentScreen==='feedbackReport') renderFeedbackReport(); }));
   unsubscribers.push(subscribeShared(rKey('complaints'), list=>{ APP_STATE.complaints = list; if(currentScreen==='complaintsHome') renderComplaintsList(); if(currentScreen==='complaintsReport') renderComplaintsReport(); }));
 }
@@ -667,6 +672,7 @@ document.getElementById('logoutBtn').addEventListener('click', doLogout);
 /* ================= HOME ================= */
 const TILE_DEFS = {
   menuList: {icon:'🧾', label:'المكونات'},
+  menuManage: {icon:'🛠️', label:'إدارة الأصناف والمكونات'},
   feedback: {icon:'💬', label:'تسجيل فيدباك'},
   complaintsHome: {icon:'⚠️', label:'سجل الشكاوى'},
   feedbackReport: {icon:'📊', label:'تقرير الفيدباك'},
@@ -674,6 +680,7 @@ const TILE_DEFS = {
 };
 const ADMIN_TILES = [
   {id:'menuList', ...TILE_DEFS.menuList},
+  {id:'menuManage', ...TILE_DEFS.menuManage},
   {id:'feedback', ...TILE_DEFS.feedback},
   {id:'complaintsHome', ...TILE_DEFS.complaintsHome},
   {id:'feedbackReport', ...TILE_DEFS.feedbackReport},
@@ -701,7 +708,8 @@ function renderHome(){
 /* ================= MENU (المكونات) ================= */
 function renderMenuList(){
   const q = (document.getElementById('menuSearch').value||'').trim();
-  document.getElementById('menuSettingsBtn').style.display = currentStaff && currentStaff.role==='admin' ? 'flex' : 'none';
+  const canManage = currentStaff && (currentStaff.role==='admin' || (currentStaff.permissions||[]).includes('menuManage'));
+  document.getElementById('menuSettingsBtn').style.display = canManage ? 'flex' : 'none';
   const sandwiches = APP_STATE.menu.filter(m=> m.type==='sandwich' && (!q || m.name.includes(q)));
   const meals = APP_STATE.menu.filter(m=> m.type==='meal' && (!q || m.name.includes(q)));
   const card = m => '<div class="menucard js-menu-item" data-id="'+m.id+'"><div><div class="mname">'+esc(m.name)+'</div><div class="mtype">'+(m.ingredients||[]).length+' مكوّن</div></div><div class="arrow">‹</div></div>';
@@ -716,7 +724,6 @@ function renderMenuList(){
   });
 }
 document.getElementById('menuSearch').addEventListener('input', renderMenuList);
-document.getElementById('menuSettingsBtn').addEventListener('click', ()=> go('settings'));
 function openMenuDetail(id){
   const m = APP_STATE.menu.find(x=>x.id===id);
   if(!m) return;
@@ -731,7 +738,6 @@ function openMenuDetail(id){
 }
 
 /* ================= SETTINGS: MENU MANAGEMENT ================= */
-function renderSettings(){ renderSettingsMenu(); renderSettingsStaff(); }
 function renderSettingsMenu(){
   const box = document.getElementById('settingsMenuBox');
   if(!APP_STATE.menu.length){ box.innerHTML = '<div class="emptystate">لسه مفيش أصناف، ضيف أول صنف</div>'; return; }
@@ -786,14 +792,14 @@ document.getElementById('me_saveBtn').addEventListener('click', async ()=>{
   }
   await saveMenu(list);
   toast('تم الحفظ');
-  go('settings');
+  go('menuManage');
 });
 document.getElementById('me_deleteBtn').addEventListener('click', async ()=>{
   if(!editingMenuId) return;
   if(!confirm('متأكد من حذف الصنف ده؟')) return;
   await saveMenu(APP_STATE.menu.filter(x=>x.id!==editingMenuId));
   toast('تم الحذف');
-  go('settings');
+  go('menuManage');
 });
 document.getElementById('addMenuItemBtn').addEventListener('click', ()=> openMenuEdit(null));
 
