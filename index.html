@@ -344,7 +344,7 @@
 
   <!-- ============ NEW FEEDBACK ============ -->
   <div class="screen" id="feedback">
-    <div class="head"><div class="back js-go" data-go="home">→</div><h2>تسجيل فيدباك</h2></div>
+    <div class="head"><div class="back" id="fbBackBtn">→</div><h2 id="feedbackScreenTitle">تسجيل فيدباك</h2></div>
     <div class="wrap">
       <div class="card">
         <h3>بيانات العميل</h3>
@@ -360,10 +360,11 @@
       <div class="card">
         <h3>ملاحظات</h3>
         <div class="field"><textarea id="fb_notes" placeholder="أي ملاحظات من العميل..."></textarea></div>
+        <button class="btn ghost" id="fbToComplaintBtn" style="width:100%;color:var(--bad);border-color:#F0CFC7;">🚩 تسجيل كمشكلة</button>
       </div>
     </div>
     <div class="btnrow">
-      <button class="btn ghost js-go" data-go="home">إلغاء</button>
+      <button class="btn ghost" id="fbCancelBtn">إلغاء</button>
       <button class="btn primary" id="fbSaveBtn">تسجيل الفيدباك</button>
     </div>
   </div>
@@ -604,14 +605,17 @@ function go(id){
   if(id==='menuList') renderMenuList();
   if(id==='menuManage') renderSettingsMenu();
   if(id==='settings') renderSettingsStaff();
-  if(id==='feedback') renderFeedbackForm();
   if(id==='complaintsHome') renderComplaintsList();
   if(id==='feedbackReport') renderFeedbackReport();
   if(id==='complaintsReport') renderComplaintsReport();
 }
 document.addEventListener('click', e=>{
   const t = e.target.closest('.js-go');
-  if(t){ go(t.getAttribute('data-go')); }
+  if(t){
+    const target = t.getAttribute('data-go');
+    if(t.classList.contains('tile') && target==='feedback'){ openNewFeedback(); return; }
+    go(target);
+  }
 });
 
 /* ================= LOGIN (أول شاشة) ================= */
@@ -876,6 +880,8 @@ document.getElementById('addStaffBtn').addEventListener('click', ()=> openStaffE
 
 /* ================= FEEDBACK ================= */
 let fbSelectedItems = new Set();
+let editingFeedbackId = null;
+let feedbackReturnScreen = 'home';
 function renderFeedbackForm(){
   document.getElementById('fb_name').value = '';
   document.getElementById('fb_phone').value = '';
@@ -884,6 +890,37 @@ function renderFeedbackForm(){
   fbSelectedItems = new Set();
   renderFbChips();
 }
+function openNewFeedback(){
+  editingFeedbackId = null;
+  feedbackReturnScreen = 'home';
+  document.getElementById('feedbackScreenTitle').textContent = 'تسجيل فيدباك';
+  document.getElementById('fbSaveBtn').textContent = 'تسجيل الفيدباك';
+  renderFeedbackForm();
+  go('feedback');
+}
+function openFeedbackEdit(id){
+  const f = APP_STATE.feedback.find(x=>x.id===id);
+  if(!f) return;
+  editingFeedbackId = id;
+  feedbackReturnScreen = 'feedbackReport';
+  document.getElementById('fb_name').value = f.customerName||'';
+  document.getElementById('fb_phone').value = f.phone||'';
+  document.getElementById('fb_notes').value = f.notes||'';
+  document.getElementById('fb_orderSearch').value = '';
+  fbSelectedItems = new Set((f.orderItems||[]).map(o=>o.id));
+  renderFbChips();
+  document.getElementById('feedbackScreenTitle').textContent = 'تعديل فيدباك';
+  document.getElementById('fbSaveBtn').textContent = 'حفظ التعديلات';
+  go('feedback');
+}
+async function deleteFeedback(id){
+  if(!confirm('متأكد من حذف الفيدباك ده؟ مفيش رجوع بعد الحذف.')) return;
+  await saveFeedback(APP_STATE.feedback.filter(f=>f.id!==id));
+  toast('تم الحذف');
+  if(currentScreen==='feedbackReport') paintFeedbackReport();
+}
+document.getElementById('fbBackBtn').addEventListener('click', ()=> go(feedbackReturnScreen));
+document.getElementById('fbCancelBtn').addEventListener('click', ()=> go(feedbackReturnScreen));
 function renderFbChips(){
   const q = (document.getElementById('fb_orderSearch').value||'').trim();
   const items = APP_STATE.menu.filter(m=> !q || m.name.includes(q));
@@ -903,21 +940,61 @@ function renderFbChips(){
   });
 }
 document.getElementById('fb_orderSearch').addEventListener('input', renderFbChips);
-document.getElementById('fbSaveBtn').addEventListener('click', async ()=>{
+
+/* saves the current form (insert or update depending on editingFeedbackId); returns false if invalid */
+async function saveFeedbackForm(){
   const name = document.getElementById('fb_name').value.trim();
   const phone = document.getElementById('fb_phone').value.trim();
-  if(!name || !phone){ toast('اكتب اسم العميل ورقم التليفون'); return; }
+  if(!name || !phone){ toast('اكتب اسم العميل ورقم التليفون'); return false; }
   const orderItems = APP_STATE.menu.filter(m=>fbSelectedItems.has(m.id)).map(m=>({id:m.id, name:m.name}));
-  const entry = {
-    id: uid(), customerName: name, phone: normalizePhone(phone),
-    orderItems, notes: document.getElementById('fb_notes').value.trim(),
-    date: new Date().toISOString(), restaurant: currentRestaurant
-  };
-  const list = APP_STATE.feedback.slice(); list.push(entry);
+  const notes = document.getElementById('fb_notes').value.trim();
+  const list = APP_STATE.feedback.slice();
+  if(editingFeedbackId){
+    const idx = list.findIndex(f=>f.id===editingFeedbackId);
+    if(idx>-1) list[idx] = Object.assign({}, list[idx], {customerName:name, phone:normalizePhone(phone), orderItems, notes});
+  } else {
+    const entry = {id:uid(), customerName:name, phone:normalizePhone(phone), orderItems, notes, date:new Date().toISOString(), restaurant:currentRestaurant};
+    list.push(entry);
+    editingFeedbackId = entry.id;
+  }
   await saveFeedback(list);
-  toast('تم تسجيل الفيدباك');
-  go('home');
+  return true;
+}
+document.getElementById('fbSaveBtn').addEventListener('click', async ()=>{
+  const isEdit = !!editingFeedbackId;
+  const ok = await saveFeedbackForm();
+  if(!ok) return;
+  toast(isEdit ? 'تم حفظ التعديلات' : 'تم تسجيل الفيدباك');
+  go(feedbackReturnScreen);
 });
+
+/* ---- تحويل الملاحظات لشكوى، زي ما بيحصل في بن العراب ---- */
+let pendingReferredFromFeedback = false;
+async function convertFeedbackToComplaint(){
+  const name = document.getElementById('fb_name').value.trim();
+  const phone = document.getElementById('fb_phone').value.trim();
+  const notes = document.getElementById('fb_notes').value.trim();
+  if(!name || !phone){ toast('اكتب اسم العميل ورقم التليفون الأول'); return; }
+  if(!notes){ toast('اكتب تفاصيل المشكلة في خانة الملاحظات الأول'); return; }
+  const ok = await saveFeedbackForm();
+  if(!ok) return;
+  const orderNames = APP_STATE.menu.filter(m=>fbSelectedItems.has(m.id)).map(m=>m.name);
+  editingComplaintId = null;
+  document.getElementById('cpFormTitle').textContent = 'تسجيل شكوى محالة من الفيدباك';
+  populateComplaintProductSelect();
+  document.getElementById('cp_name').value = name;
+  document.getElementById('cp_phone').value = phone;
+  document.getElementById('cp_product').value = orderNames[0] || '';
+  document.getElementById('cp_product_details').value = orderNames.length>1 ? orderNames.slice(1).join('، ') : '';
+  document.getElementById('cp_invoice_date').value = todayISO();
+  document.getElementById('cp_issue').value = notes;
+  document.getElementById('cp_department').value = '';
+  document.getElementById('cp_action').value = '';
+  pendingReferredFromFeedback = true;
+  toast('اتحفظ الفيدباك، كمّل بيانات الشكوى');
+  go('complaintEdit');
+}
+document.getElementById('fbToComplaintBtn').addEventListener('click', convertFeedbackToComplaint);
 
 /* ================= COMPLAINTS ================= */
 function populateComplaintProductSelect(){
@@ -927,6 +1004,7 @@ function populateComplaintProductSelect(){
 let editingComplaintId = null;
 function resetComplaintForm(){
   editingComplaintId = null;
+  pendingReferredFromFeedback = false;
   document.getElementById('cpFormTitle').textContent = 'تسجيل شكوى';
   populateComplaintProductSelect();
   ['cp_name','cp_phone','cp_product','cp_product_details','cp_invoice_date','cp_issue','cp_department','cp_action'].forEach(id=> document.getElementById(id).value='');
@@ -952,8 +1030,9 @@ document.getElementById('cpSaveBtn').addEventListener('click', async ()=>{
     const idx = list.findIndex(c=>c.id===editingComplaintId);
     if(idx>-1) list[idx] = Object.assign({}, list[idx], fields);
   } else {
-    list.push(Object.assign({id:uid(), date:new Date().toISOString(), status:'pending', restaurant:currentRestaurant}, fields));
+    list.push(Object.assign({id:uid(), date:new Date().toISOString(), status:'pending', restaurant:currentRestaurant, referredFromFeedback: pendingReferredFromFeedback}, fields));
   }
+  pendingReferredFromFeedback = false;
   await saveComplaints(list);
   btn.disabled = false; btn.textContent = 'تسجيل الشكوى';
   toast(editingComplaintId ? 'تم تحديث الشكوى' : 'تم تسجيل الشكوى');
@@ -985,6 +1064,7 @@ function paintComplaintsList(){
   box.innerHTML = list.map(c=>{
     const st = c.status||'pending';
     return '<div class="complaintcard">'
+      + (c.referredFromFeedback ? '<div style="background:#FBF0DD;color:#7A5A22;font-size:10.5px;font-weight:800;padding:4px 10px;border-radius:8px;display:inline-block;margin-bottom:8px;">💬 محالة من الفيدباك</div>' : '')
       + '<div class="ctop"><div><h4>'+esc(c.customerName)+'</h4><small>'+esc(c.phone)+' — '+fmtDate(c.date)+'</small></div>'
       + '<span class="badge '+st+'">'+(st==='resolved'?'تم الحل':'قيد المتابعة')+'</span></div>'
       + (c.product ? '<div class="crow"><b>الصنف:</b> '+esc(c.product)+(c.productDetails?' ('+esc(c.productDetails)+')':'')+'</div>' : '')
@@ -1047,12 +1127,17 @@ document.getElementById('frTo').addEventListener('change', paintFeedbackReport);
 function paintFeedbackReport(){
   const list = getFilteredFeedback();
   document.getElementById('frStats').innerHTML = '<div><b>'+list.length+'</b><span>عدد الفيدباكات</span></div>';
-  const headers = ['التاريخ','اسم العميل','رقم التليفون','الطلب','ملاحظات'];
-  const rows = list.map(f=>[fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), f.notes||'']);
+  const headers = ['التاريخ','اسم العميل','رقم التليفون','الطلب','ملاحظات','الإجراءات'];
   const table = document.getElementById('frTable');
-  table.innerHTML = '<thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'
-    + (rows.length ? rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px;">مفيش بيانات في الفترة دي</td></tr>')
-    + '</tbody>';
+  const bodyRows = list.length ? list.map(f=>{
+    const cells = [fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), f.notes||''];
+    return '<tr>'+cells.map(c=>'<td>'+esc(c)+'</td>').join('')
+      + '<td><button class="js-edit-fb" data-id="'+f.id+'" style="border:none;border-radius:8px;padding:6px 10px;font-size:11px;background:#EDE7DA;cursor:pointer;margin-left:5px;">تعديل</button>'
+      + '<button class="js-del-fb" data-id="'+f.id+'" style="border:none;border-radius:8px;padding:6px 10px;font-size:11px;background:#F4D9D4;color:var(--bad);cursor:pointer;">حذف</button></td></tr>';
+  }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">مفيش بيانات في الفترة دي</td></tr>';
+  table.innerHTML = '<thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+bodyRows+'</tbody>';
+  document.querySelectorAll('.js-edit-fb').forEach(b=> b.addEventListener('click', ()=> openFeedbackEdit(b.getAttribute('data-id'))));
+  document.querySelectorAll('.js-del-fb').forEach(b=> b.addEventListener('click', ()=> deleteFeedback(b.getAttribute('data-id'))));
 }
 (function(){ const _orig = renderFeedbackReport; renderFeedbackReport = function(){ _orig(); paintFeedbackReport(); }; })();
 function exportFeedbackExcel(){
