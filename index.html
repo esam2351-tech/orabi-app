@@ -187,6 +187,11 @@
   .install-modal .muted-install{color:var(--muted);font-size:12px;line-height:1.7;margin:0 0 12px;}
   .install-modal ol li b{color:var(--primary-dark);}
 
+  /* ---------- staff permissions checkboxes ---------- */
+  .perm-row{display:flex;align-items:center;gap:10px;background:#FCF9F3;border:1.5px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:8px;cursor:pointer;}
+  .perm-row input{width:18px;height:18px;flex-shrink:0;accent-color:var(--primary);}
+  .perm-row span{font-size:13px;font-weight:700;}
+
 </style>
 </head>
 <body>
@@ -318,7 +323,11 @@
         <div class="field"><label>اسم المستخدم</label><input id="st_user" placeholder="username" autocomplete="off"></div>
         <div class="field"><label>كلمة السر</label><input id="st_pass" placeholder="password" autocomplete="off"></div>
         <div class="field"><label>الصلاحية</label>
-          <select id="st_role"><option value="employee">موظف (فيدباك بس)</option><option value="admin">أدمن (كل الصلاحيات)</option></select>
+          <select id="st_role"><option value="employee">موظف (صلاحيات محددة)</option><option value="admin">أدمن (كل الصلاحيات)</option></select>
+        </div>
+        <div class="field" id="st_permWrap">
+          <label>الأقسام اللي يقدر يدخلها</label>
+          <div id="st_permissionsBox"></div>
         </div>
       </div>
     </div>
@@ -612,7 +621,7 @@ async function doLogin(){
   const match = APP_STATE.staff.find(s=> s.user===u && s.pass===p);
   btn.disabled = false; btn.textContent = 'دخول';
   if(!match){ err.textContent = 'اسم المستخدم أو كلمة السر غلط'; return; }
-  currentStaff = { user: match.user, name: match.name, role: match.role || 'employee' };
+  currentStaff = { user: match.user, name: match.name, role: match.role || 'employee', permissions: match.permissions || [] };
   document.getElementById('loginUser').value = '';
   document.getElementById('loginPass').value = '';
   document.getElementById('splashGreetName').textContent = currentStaff.name;
@@ -656,16 +665,20 @@ document.getElementById('switchRestBtn').addEventListener('click', ()=>{ go('spl
 document.getElementById('logoutBtn').addEventListener('click', doLogout);
 
 /* ================= HOME ================= */
+const TILE_DEFS = {
+  menuList: {icon:'🧾', label:'المكونات'},
+  feedback: {icon:'💬', label:'تسجيل فيدباك'},
+  complaintsHome: {icon:'⚠️', label:'سجل الشكاوى'},
+  feedbackReport: {icon:'📊', label:'تقرير الفيدباك'},
+  complaintsReport: {icon:'📋', label:'تقرير الشكاوى'}
+};
 const ADMIN_TILES = [
-  {id:'menuList', icon:'🧾', label:'المكونات'},
-  {id:'feedback', icon:'💬', label:'تسجيل فيدباك'},
-  {id:'complaintsHome', icon:'⚠️', label:'سجل الشكاوى'},
-  {id:'feedbackReport', icon:'📊', label:'تقرير الفيدباك'},
-  {id:'complaintsReport', icon:'📋', label:'تقرير الشكاوى'},
+  {id:'menuList', ...TILE_DEFS.menuList},
+  {id:'feedback', ...TILE_DEFS.feedback},
+  {id:'complaintsHome', ...TILE_DEFS.complaintsHome},
+  {id:'feedbackReport', ...TILE_DEFS.feedbackReport},
+  {id:'complaintsReport', ...TILE_DEFS.complaintsReport},
   {id:'settings', icon:'⚙️', label:'الإعدادات'}
-];
-const EMPLOYEE_TILES = [
-  {id:'feedback', icon:'💬', label:'تسجيل فيدباك'}
 ];
 function renderHome(){
   const r = RESTAURANTS[currentRestaurant];
@@ -673,10 +686,16 @@ function renderHome(){
   document.getElementById('homeRestName').textContent = r.name;
   document.getElementById('homeRoleLabel').textContent = currentStaff.role==='admin' ? 'أدمن' : 'موظف';
   document.getElementById('homeGreet').textContent = 'أهلاً ' + currentStaff.name;
-  const tiles = currentStaff.role==='admin' ? ADMIN_TILES : EMPLOYEE_TILES;
-  document.getElementById('homeTiles').innerHTML = tiles.map(t=>
-    '<div class="tile js-go" data-go="'+t.id+'"><span class="ic">'+t.icon+'</span><span>'+esc(t.label)+'</span></div>'
-  ).join('');
+  let tiles;
+  if(currentStaff.role==='admin'){
+    tiles = ADMIN_TILES;
+  } else {
+    const perms = currentStaff.permissions || [];
+    tiles = perms.filter(id=>TILE_DEFS[id]).map(id=>({id, ...TILE_DEFS[id]}));
+  }
+  document.getElementById('homeTiles').innerHTML = tiles.length
+    ? tiles.map(t=> '<div class="tile js-go" data-go="'+t.id+'"><span class="ic">'+t.icon+'</span><span>'+esc(t.label)+'</span></div>').join('')
+    : '<div class="emptystate" style="grid-column:1/-1;">مفيش صلاحيات متاحة لحسابك، كلّم الأدمن</div>';
 }
 
 /* ================= MENU (المكونات) ================= */
@@ -782,13 +801,27 @@ document.getElementById('addMenuItemBtn').addEventListener('click', ()=> openMen
 function renderSettingsStaff(){
   const box = document.getElementById('staffListBox');
   if(!box) return;
-  box.innerHTML = APP_STATE.staff.map(s=>
-    '<div class="staffrow"><div><b>'+esc(s.name)+'</b> '+(s.role==='admin'?'👑':'')+'<br><span>@'+esc(s.user)+'</span></div>'
-    + '<div class="actions"><button style="background:#EDE7DA;" class="js-edit-staff" data-u="'+esc(s.user)+'">تعديل</button></div></div>'
-  ).join('');
+  box.innerHTML = APP_STATE.staff.map(s=>{
+    const permLabel = s.role==='admin' ? 'كل الصلاحيات' : (s.permissions&&s.permissions.length ? s.permissions.map(id=>TILE_DEFS[id]?TILE_DEFS[id].label:id).join('، ') : 'مفيش صلاحيات محددة');
+    return '<div class="staffrow"><div><b>'+esc(s.name)+'</b> '+(s.role==='admin'?'👑':'')+'<br><span>@'+esc(s.user)+' — '+esc(permLabel)+'</span></div>'
+    + '<div class="actions"><button style="background:#EDE7DA;" class="js-edit-staff" data-u="'+esc(s.user)+'">تعديل</button></div></div>';
+  }).join('');
   document.querySelectorAll('.js-edit-staff').forEach(b=> b.addEventListener('click', ()=> openStaffEdit(b.getAttribute('data-u'))));
 }
 let editingStaffOriginalUser = null;
+function renderStaffPermCheckboxes(selected){
+  const box = document.getElementById('st_permissionsBox');
+  box.innerHTML = Object.keys(TILE_DEFS).map(id=>{
+    const t = TILE_DEFS[id];
+    const checked = selected.includes(id) ? 'checked' : '';
+    return '<label class="perm-row"><input type="checkbox" class="st-perm-cb" value="'+id+'" '+checked+'><span>'+t.icon+' '+esc(t.label)+'</span></label>';
+  }).join('');
+}
+function updateStaffPermVisibility(){
+  const role = document.getElementById('st_role').value;
+  document.getElementById('st_permWrap').style.display = role==='admin' ? 'none' : 'block';
+}
+document.getElementById('st_role').addEventListener('change', updateStaffPermVisibility);
 function openStaffEdit(user){
   editingStaffOriginalUser = user || null;
   const s = user ? APP_STATE.staff.find(x=>x.user===user) : null;
@@ -798,6 +831,8 @@ function openStaffEdit(user){
   document.getElementById('st_pass').value = s ? s.pass : '';
   document.getElementById('st_role').value = s ? (s.role||'employee') : 'employee';
   document.getElementById('st_deleteBtn').style.display = s ? 'block' : 'none';
+  renderStaffPermCheckboxes(s ? (s.permissions||[]) : ['feedback']);
+  updateStaffPermVisibility();
   go('staffEdit');
 }
 document.getElementById('st_saveBtn').addEventListener('click', async ()=>{
@@ -805,16 +840,19 @@ document.getElementById('st_saveBtn').addEventListener('click', async ()=>{
   const user = document.getElementById('st_user').value.trim();
   const pass = document.getElementById('st_pass').value.trim();
   const role = document.getElementById('st_role').value;
+  const permissions = Array.from(document.querySelectorAll('.st-perm-cb:checked')).map(cb=>cb.value);
   if(!name || !user || !pass){ toast('كمّل كل الحقول'); return; }
+  if(role==='employee' && !permissions.length){ toast('اختار قسم واحد على الأقل للموظف'); return; }
   const list = APP_STATE.staff.slice();
   const dup = list.find(x=>x.user===user && x.user!==editingStaffOriginalUser);
   if(dup){ toast('اسم المستخدم ده مستخدم بالفعل'); return; }
+  const record = {user, pass, name, role, permissions: role==='employee' ? permissions : []};
   if(editingStaffOriginalUser){
     const idx = list.findIndex(x=>x.user===editingStaffOriginalUser);
-    if(idx>-1) list[idx] = {user, pass, name, role};
-    if(currentStaff && currentStaff.user===editingStaffOriginalUser) currentStaff = {user, name, role};
+    if(idx>-1) list[idx] = record;
+    if(currentStaff && currentStaff.user===editingStaffOriginalUser) currentStaff = {user, name, role, permissions: record.permissions};
   } else {
-    list.push({user, pass, name, role});
+    list.push(record);
   }
   await saveStaff(list);
   toast('تم الحفظ');
