@@ -284,6 +284,47 @@
     </div>
   </div>
 
+  <!-- ============ SUGGESTIONS LIST ============ -->
+  <div class="screen" id="suggestionsHome">
+    <div class="head"><div class="back js-go" data-go="home">→</div><h2>المقترحات</h2></div>
+    <div class="wrap" style="padding-bottom:0;">
+      <button class="btn primary" id="newSuggestionBtn" style="width:100%;margin-bottom:16px;">💡 تسجيل مقترح جديد</button>
+      <div class="field"><input id="sgSearch" placeholder="ابحث بالاسم أو نص المقترح"></div>
+    </div>
+    <div id="suggestionsListBox"><div class="emptystate">جارِ التحميل...</div></div>
+  </div>
+
+  <!-- ============ SUGGESTION ADD ============ -->
+  <div class="screen" id="suggestionAdd">
+    <div class="head"><div class="back js-go" data-go="suggestionsHome">→</div><h2>تسجيل مقترح</h2></div>
+    <div class="wrap">
+      <div class="card">
+        <h3>تفاصيل المقترح</h3>
+        <p class="sub">التاريخ بيتسجل تلقائي وقت الحفظ</p>
+        <div class="field"><label>اسم مقدّم الاقتراح</label><input id="sg_submitter" placeholder="اسم الموظف أو الشخص صاحب الفكرة"></div>
+        <div class="field" style="margin-bottom:0;"><label>شرح المقترح</label><textarea id="sg_description" placeholder="اكتب المقترح بالتفصيل..."></textarea></div>
+      </div>
+    </div>
+    <div class="btnrow">
+      <button class="btn ghost js-go" data-go="suggestionsHome">إلغاء</button>
+      <button class="btn primary" id="sgSaveBtn">حفظ المقترح</button>
+    </div>
+  </div>
+
+  <!-- ============ SUGGESTIONS REPORT ============ -->
+  <div class="screen" id="suggestionsReport">
+    <div class="head"><div class="back js-go" data-go="home">→</div><h2>تقرير المقترحات</h2></div>
+    <div class="report-row">
+      <div class="field"><label>من تاريخ</label><input id="sgrFrom" type="date"></div>
+      <div class="field"><label>إلى تاريخ</label><input id="sgrTo" type="date"></div>
+    </div>
+    <div class="btnrow" style="padding-top:0;">
+      <button class="btn ghost" id="sgrExcelBtn" style="width:100%;">📊 تصدير Excel</button>
+    </div>
+    <div class="stat-box" id="sgrStats"></div>
+    <div class="table-wrap"><table class="rpt" id="sgrTable"></table></div>
+  </div>
+
   <!-- ============ SETTINGS ============ -->
   <div class="screen" id="settings">
     <div class="head"><div class="back js-go" data-go="home">→</div><h2>الإعدادات</h2></div>
@@ -527,7 +568,7 @@ let currentStaff = null;        // {user,name,role}
 let db = null;
 let firebaseSignedIn = false;
 const DATA_COL = 'arabi_group_data';
-let APP_STATE = { staff: [], menu: [], feedback: [], complaints: [] };
+let APP_STATE = { staff: [], menu: [], feedback: [], complaints: [], suggestions: [] };
 let unsubscribers = [];
 let backendReady = false;
 
@@ -580,6 +621,7 @@ async function saveStaff(arr){ APP_STATE.staff = arr; saveShared('staff', arr); 
 async function saveMenu(arr){ APP_STATE.menu = arr; saveShared(rKey('menu'), arr); }
 async function saveFeedback(arr){ APP_STATE.feedback = arr; saveShared(rKey('feedback'), arr); }
 async function saveComplaints(arr){ APP_STATE.complaints = arr; saveShared(rKey('complaints'), arr); }
+async function saveSuggestions(arr){ APP_STATE.suggestions = arr; saveShared(rKey('suggestions'), arr); }
 
 /* ================= BOOT ================= */
 async function boot(){
@@ -608,6 +650,8 @@ function go(id){
   if(id==='complaintsHome') renderComplaintsList();
   if(id==='feedbackReport') renderFeedbackReport();
   if(id==='complaintsReport') renderComplaintsReport();
+  if(id==='suggestionsHome') renderSuggestionsList();
+  if(id==='suggestionsReport') renderSuggestionsReport();
 }
 document.addEventListener('click', e=>{
   const t = e.target.closest('.js-go');
@@ -643,10 +687,11 @@ document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==
 function subscribeRestaurantData(){
   unsubscribers.forEach(u=>{ try{u();}catch(e){} });
   unsubscribers = [subscribeShared('staff', list=>{ APP_STATE.staff = list; if(currentScreen==='settings') renderSettingsStaff(); })];
-  APP_STATE.menu = []; APP_STATE.feedback = []; APP_STATE.complaints = [];
+  APP_STATE.menu = []; APP_STATE.feedback = []; APP_STATE.complaints = []; APP_STATE.suggestions = [];
   unsubscribers.push(subscribeShared(rKey('menu'), list=>{ APP_STATE.menu = list; if(currentScreen==='menuList') renderMenuList(); if(currentScreen==='menuManage') renderSettingsMenu(); if(currentScreen==='feedback') renderFeedbackForm(); }));
   unsubscribers.push(subscribeShared(rKey('feedback'), list=>{ APP_STATE.feedback = list; if(currentScreen==='feedbackReport') renderFeedbackReport(); }));
   unsubscribers.push(subscribeShared(rKey('complaints'), list=>{ APP_STATE.complaints = list; if(currentScreen==='complaintsHome') renderComplaintsList(); if(currentScreen==='complaintsReport') renderComplaintsReport(); }));
+  unsubscribers.push(subscribeShared(rKey('suggestions'), list=>{ APP_STATE.suggestions = list; if(currentScreen==='suggestionsHome') renderSuggestionsList(); if(currentScreen==='suggestionsReport') renderSuggestionsReport(); }));
 }
 function pickRestaurant(key){
   currentRestaurant = key;
@@ -679,16 +724,20 @@ const TILE_DEFS = {
   menuManage: {icon:'🛠️', label:'إدارة الأصناف والمكونات'},
   feedback: {icon:'💬', label:'تسجيل فيدباك'},
   complaintsHome: {icon:'⚠️', label:'سجل الشكاوى'},
+  suggestionsHome: {icon:'💡', label:'المقترحات'},
   feedbackReport: {icon:'📊', label:'تقرير الفيدباك'},
-  complaintsReport: {icon:'📋', label:'تقرير الشكاوى'}
+  complaintsReport: {icon:'📋', label:'تقرير الشكاوى'},
+  suggestionsReport: {icon:'📈', label:'تقرير المقترحات'}
 };
 const ADMIN_TILES = [
   {id:'menuList', ...TILE_DEFS.menuList},
   {id:'menuManage', ...TILE_DEFS.menuManage},
   {id:'feedback', ...TILE_DEFS.feedback},
   {id:'complaintsHome', ...TILE_DEFS.complaintsHome},
+  {id:'suggestionsHome', ...TILE_DEFS.suggestionsHome},
   {id:'feedbackReport', ...TILE_DEFS.feedbackReport},
   {id:'complaintsReport', ...TILE_DEFS.complaintsReport},
+  {id:'suggestionsReport', ...TILE_DEFS.suggestionsReport},
   {id:'settings', icon:'⚙️', label:'الإعدادات'}
 ];
 function renderHome(){
@@ -1106,6 +1155,65 @@ async function deleteComplaint(id){
   await saveComplaints(APP_STATE.complaints.filter(c=>c.id!==id));
 }
 
+/* ================= SUGGESTIONS (المقترحات) ================= */
+let allSuggestionsCache = [];
+function renderSuggestionsList(){
+  allSuggestionsCache = APP_STATE.suggestions.slice().sort((a,b)=> new Date(b.date)-new Date(a.date));
+  paintSuggestionsList();
+}
+document.getElementById('sgSearch').addEventListener('input', paintSuggestionsList);
+function paintSuggestionsList(){
+  const box = document.getElementById('suggestionsListBox');
+  const q = (document.getElementById('sgSearch').value || '').trim();
+  const list = q ? allSuggestionsCache.filter(s=> (s.submitter||'').includes(q) || (s.description||'').includes(q)) : allSuggestionsCache;
+  if(!list.length){ box.innerHTML = '<div class="emptystate">'+(q?'مفيش مقترحات مطابقة':'لا توجد مقترحات مسجلة بعد')+'</div>'; return; }
+  box.innerHTML = list.map(s=>{
+    const status = s.status || 'review';
+    const implemented = status==='implemented';
+    return '<div class="complaintcard">'
+      + '<div class="ctop"><div><h4>'+esc(s.submitter||'—')+'</h4><small>'+fmtDate(s.date)+(s.staff?' — سجّله: '+esc(s.staff):'')+'</small></div>'
+      + '<span class="badge '+(implemented?'resolved':'pending')+'">'+(implemented?'تم التنفيذ':'تحت الدراسة')+'</span></div>'
+      + '<div class="crow">'+esc(s.description||'—')+'</div>'
+      + '<div class="cbtnrow">'
+      + '<button style="background:'+(implemented?'#FBE7CF':'#DCEFE0')+';color:'+(implemented?'#A65B12':'#2E7D45')+';" class="js-toggle-sg" data-id="'+s.id+'">'+(implemented?'↩️ رجوع لتحت الدراسة':'✓ تحديد كمنفّذ')+'</button>'
+      + '<button style="background:#F4D9D4;color:var(--bad);" class="js-del-sg" data-id="'+s.id+'">حذف</button>'
+      + '</div></div>';
+  }).join('');
+  document.querySelectorAll('.js-toggle-sg').forEach(b=> b.addEventListener('click', ()=> toggleSuggestionStatus(b.getAttribute('data-id'))));
+  document.querySelectorAll('.js-del-sg').forEach(b=> b.addEventListener('click', ()=> deleteSuggestion(b.getAttribute('data-id'))));
+}
+function resetSuggestionForm(){
+  document.getElementById('sg_submitter').value = '';
+  document.getElementById('sg_description').value = '';
+}
+document.getElementById('newSuggestionBtn').addEventListener('click', ()=>{ resetSuggestionForm(); go('suggestionAdd'); });
+document.getElementById('sgSaveBtn').addEventListener('click', async ()=>{
+  const submitter = document.getElementById('sg_submitter').value.trim();
+  const description = document.getElementById('sg_description').value.trim();
+  if(!submitter || !description){ toast('اكتب اسم مقدّم الاقتراح وشرح المقترح'); return; }
+  const btn = document.getElementById('sgSaveBtn');
+  btn.disabled = true; btn.textContent = 'جارِ الحفظ...';
+  const list = APP_STATE.suggestions.slice();
+  list.push({
+    id: uid(), date: new Date().toISOString(), submitter, description,
+    staff: currentStaff ? currentStaff.name : 'غير معروف', status:'review', restaurant: currentRestaurant
+  });
+  await saveSuggestions(list);
+  btn.disabled = false; btn.textContent = 'حفظ المقترح';
+  toast('تم حفظ المقترح');
+  go('suggestionsHome');
+});
+async function toggleSuggestionStatus(id){
+  const list = APP_STATE.suggestions.map(s=> s.id===id ? Object.assign({}, s, {status:(s.status==='implemented'?'review':'implemented')}) : s);
+  await saveSuggestions(list);
+  if(currentScreen==='suggestionsHome') renderSuggestionsList();
+}
+async function deleteSuggestion(id){
+  if(!confirm('متأكد إنك عايز تحذف المقترح ده نهائيًا؟ مفيش رجوع بعد الحذف.')) return;
+  await saveSuggestions(APP_STATE.suggestions.filter(s=>s.id!==id));
+  if(currentScreen==='suggestionsHome') renderSuggestionsList();
+}
+
 /* ================= REPORTS ================= */
 function inRange(iso, from, to){
   const d = (iso||'').slice(0,10);
@@ -1180,6 +1288,35 @@ function exportComplaintsExcel(){
   const headers = ['التاريخ','اسم العميل','رقم الموبايل','الصنف','المشكلة','القسم','الحالة'];
   const rows = list.map(c=>[fmtDate(c.date), c.customerName, c.phone, c.product||'', c.issue||'', c.department||'', (c.status==='resolved'?'تم الحل':'قيد المتابعة')]);
   exportRowsToExcel('تقرير-الشكاوى.xlsx', 'الشكاوى', headers, rows);
+}
+
+function getFilteredSuggestions(){
+  const from = document.getElementById('sgrFrom').value;
+  const to = document.getElementById('sgrTo').value;
+  return APP_STATE.suggestions.filter(s=> inRange(s.date, from, to)).sort((a,b)=> new Date(b.date)-new Date(a.date));
+}
+document.getElementById('sgrFrom').addEventListener('change', paintSuggestionsReport);
+document.getElementById('sgrTo').addEventListener('change', paintSuggestionsReport);
+function renderSuggestionsReport(){ document.getElementById('sgrExcelBtn').onclick = exportSuggestionsExcel; paintSuggestionsReport(); }
+function paintSuggestionsReport(){
+  const list = getFilteredSuggestions();
+  const implemented = list.filter(s=>s.status==='implemented').length;
+  document.getElementById('sgrStats').innerHTML =
+    '<div><b>'+list.length+'</b><span>إجمالي المقترحات</span></div>'
+    + '<div><b>'+implemented+'</b><span>تم تنفيذها</span></div>'
+    + '<div><b>'+(list.length-implemented)+'</b><span>تحت الدراسة</span></div>';
+  const headers = ['التاريخ','مقدّم الاقتراح','شرح المقترح','سجّله','الحالة'];
+  const rows = list.map(s=>[fmtDate(s.date), s.submitter, s.description, s.staff||'', (s.status==='implemented'?'تم التنفيذ':'تحت الدراسة')]);
+  const table = document.getElementById('sgrTable');
+  table.innerHTML = '<thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'
+    + (rows.length ? rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px;">مفيش بيانات في الفترة دي</td></tr>')
+    + '</tbody>';
+}
+function exportSuggestionsExcel(){
+  const list = getFilteredSuggestions();
+  const headers = ['التاريخ','مقدّم الاقتراح','شرح المقترح','سجّله','الحالة'];
+  const rows = list.map(s=>[fmtDate(s.date), s.submitter, s.description, s.staff||'', (s.status==='implemented'?'تم التنفيذ':'تحت الدراسة')]);
+  exportRowsToExcel('تقرير-المقترحات.xlsx', 'المقترحات', headers, rows);
 }
 
 /* ================= GENERIC REPORT EXPORT (Excel / PDF) ================= */
