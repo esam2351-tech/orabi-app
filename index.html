@@ -132,6 +132,10 @@
   .chip-select.active{background:var(--primary);color:var(--on-primary);border-color:var(--primary);}
   .chip-select input{display:none;}
 
+  .star-rating{display:flex;gap:6px;font-size:28px;line-height:1;}
+  .star-rating span{color:#E3DACA;cursor:pointer;transition:color .1s;}
+  .star-rating span.on{color:#F0A93A;}
+
   .ingredient-editrow{display:flex;gap:8px;margin-bottom:8px;align-items:center;}
   .ingredient-editrow input{flex:1;}
   .ingredient-editrow .rm{width:34px;height:34px;border-radius:9px;border:none;background:#F4D9D4;color:var(--bad);font-size:15px;cursor:pointer;flex-shrink:0;}
@@ -397,6 +401,24 @@
         <p class="sub">اختار الأصناف اللي طلبها العميل</p>
         <div class="field"><input id="fb_orderSearch" placeholder="ابحث عن صنف..."></div>
         <div id="fb_orderChips"></div>
+      </div>
+      <div class="card">
+        <h3>تقييم الزيارة</h3>
+        <div class="field">
+          <label>الأكل</label>
+          <div class="star-rating" id="fb_foodStars" data-value="0">
+            <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>التوصيل</label>
+          <div class="star-rating" id="fb_deliveryStars" data-value="0">
+            <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+          </div>
+        </div>
+        <div class="field"><label>بتاكل منين في شبين؟</label><input id="fb_whereElse" placeholder="اسم المطعم أو المكان..."></div>
+        <div class="field"><label>مفتقد ايه في شبين؟</label><input id="fb_missing" placeholder="حاجة حاسس إنها ناقصة في شبين..."></div>
+        <div class="field"><label>عندك اقتراح؟</label><input id="fb_suggestion" placeholder="أي اقتراح من العميل..."></div>
       </div>
       <div class="card">
         <h3>ملاحظات</h3>
@@ -936,9 +958,40 @@ function renderFeedbackForm(){
   document.getElementById('fb_phone').value = '';
   document.getElementById('fb_notes').value = '';
   document.getElementById('fb_orderSearch').value = '';
+  document.getElementById('fb_whereElse').value = '';
+  document.getElementById('fb_missing').value = '';
+  document.getElementById('fb_suggestion').value = '';
+  setStarRating('fb_foodStars', 0);
+  setStarRating('fb_deliveryStars', 0);
   fbSelectedItems = new Set();
   renderFbChips();
 }
+function setStarRating(containerId, value){
+  const box = document.getElementById(containerId);
+  if(!box) return;
+  box.setAttribute('data-value', String(value));
+  box.querySelectorAll('span').forEach(sp=>{
+    const v = parseInt(sp.getAttribute('data-v'),10);
+    sp.classList.toggle('on', v<=value);
+  });
+}
+function getStarRating(containerId){
+  const box = document.getElementById(containerId);
+  if(!box) return 0;
+  return parseInt(box.getAttribute('data-value')||'0',10);
+}
+function initStarRatingWidget(containerId){
+  const box = document.getElementById(containerId);
+  if(!box) return;
+  box.querySelectorAll('span').forEach(sp=>{
+    sp.addEventListener('click', ()=>{
+      const v = parseInt(sp.getAttribute('data-v'),10);
+      setStarRating(containerId, v);
+    });
+  });
+}
+initStarRatingWidget('fb_foodStars');
+initStarRatingWidget('fb_deliveryStars');
 function openNewFeedback(){
   editingFeedbackId = null;
   feedbackReturnScreen = 'home';
@@ -956,6 +1009,11 @@ function openFeedbackEdit(id){
   document.getElementById('fb_phone').value = f.phone||'';
   document.getElementById('fb_notes').value = f.notes||'';
   document.getElementById('fb_orderSearch').value = '';
+  document.getElementById('fb_whereElse').value = f.whereElse||'';
+  document.getElementById('fb_missing').value = f.missing||'';
+  document.getElementById('fb_suggestion').value = f.suggestion||'';
+  setStarRating('fb_foodStars', f.foodRating||0);
+  setStarRating('fb_deliveryStars', f.deliveryRating||0);
   fbSelectedItems = new Set((f.orderItems||[]).map(o=>o.id));
   renderFbChips();
   document.getElementById('feedbackScreenTitle').textContent = 'تعديل فيدباك';
@@ -997,12 +1055,17 @@ async function saveFeedbackForm(){
   if(!name || !phone){ toast('اكتب اسم العميل ورقم التليفون'); return false; }
   const orderItems = APP_STATE.menu.filter(m=>fbSelectedItems.has(m.id)).map(m=>({id:m.id, name:m.name}));
   const notes = document.getElementById('fb_notes').value.trim();
+  const foodRating = getStarRating('fb_foodStars');
+  const deliveryRating = getStarRating('fb_deliveryStars');
+  const whereElse = document.getElementById('fb_whereElse').value.trim();
+  const missing = document.getElementById('fb_missing').value.trim();
+  const suggestion = document.getElementById('fb_suggestion').value.trim();
   const list = APP_STATE.feedback.slice();
   if(editingFeedbackId){
     const idx = list.findIndex(f=>f.id===editingFeedbackId);
-    if(idx>-1) list[idx] = Object.assign({}, list[idx], {customerName:name, phone:normalizePhone(phone), orderItems, notes});
+    if(idx>-1) list[idx] = Object.assign({}, list[idx], {customerName:name, phone:normalizePhone(phone), orderItems, notes, foodRating, deliveryRating, whereElse, missing, suggestion});
   } else {
-    const entry = {id:uid(), customerName:name, phone:normalizePhone(phone), orderItems, notes, date:new Date().toISOString(), restaurant:currentRestaurant};
+    const entry = {id:uid(), customerName:name, phone:normalizePhone(phone), orderItems, notes, foodRating, deliveryRating, whereElse, missing, suggestion, date:new Date().toISOString(), restaurant:currentRestaurant};
     list.push(entry);
     editingFeedbackId = entry.id;
   }
@@ -1120,6 +1183,7 @@ function paintComplaintsList(){
       + '<div class="crow"><b>المشكلة:</b> '+esc(c.issue)+'</div>'
       + (c.department ? '<div class="crow"><b>القسم:</b> '+esc(c.department)+'</div>' : '')
       + (c.action ? '<div class="crow"><b>الإجراء:</b> '+esc(c.action)+'</div>' : '')
+      + '<button style="width:100%;background:#25D366;color:#fff;border:none;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'Tajawal\';margin-top:4px;display:flex;align-items:center;justify-content:center;gap:6px;" class="js-share-cp" data-id="'+c.id+'">📤 مشاركة على واتساب</button>'
       + '<div class="cbtnrow">'
       + '<button style="background:'+(st==='resolved'?'#FBE7CF':'#DCEFE0')+';color:'+(st==='resolved'?'#A65B12':'#2E7D45')+';" class="js-toggle-cp" data-id="'+c.id+'">'+(st==='resolved'?'إعادة فتح':'تحديد كمحلولة')+'</button>'
       + '<button style="background:#EDE7DA;" class="js-edit-cp" data-id="'+c.id+'">تعديل</button>'
@@ -1129,6 +1193,27 @@ function paintComplaintsList(){
   document.querySelectorAll('.js-toggle-cp').forEach(b=> b.addEventListener('click', ()=> toggleComplaintStatus(b.getAttribute('data-id'))));
   document.querySelectorAll('.js-edit-cp').forEach(b=> b.addEventListener('click', ()=> editComplaint(b.getAttribute('data-id'))));
   document.querySelectorAll('.js-del-cp').forEach(b=> b.addEventListener('click', ()=> deleteComplaint(b.getAttribute('data-id'))));
+  document.querySelectorAll('.js-share-cp').forEach(b=> b.addEventListener('click', ()=> shareComplaintWhatsApp(b.getAttribute('data-id'))));
+}
+function shareComplaintWhatsApp(id){
+  const c = allComplaintsCache.find(x=>x.id===id);
+  if(!c) return;
+  const r = RESTAURANTS[currentRestaurant];
+  const st = c.status||'pending';
+  const lines = [
+    '📋 *شكوى عميل* — '+(r?r.name:''),
+    '',
+    '👤 *الاسم:* '+(c.customerName||'—'),
+    '📞 *الموبايل:* '+(c.phone||'—'),
+    '📅 *التاريخ:* '+fmtDate(c.date)
+  ];
+  if(c.product) lines.push('🛒 *الصنف:* '+c.product+(c.productDetails?' ('+c.productDetails+')':''));
+  lines.push('⚠️ *المشكلة:* '+(c.issue||'—'));
+  if(c.department) lines.push('🗂️ *القسم:* '+c.department);
+  if(c.action) lines.push('✅ *الإجراء المتخذ:* '+c.action);
+  lines.push('📌 *الحالة:* '+(st==='resolved'?'تم الحل':'قيد المتابعة'));
+  const msg = lines.join('\n');
+  window.open('https://wa.me/?text='+encodeURIComponent(msg), '_blank');
 }
 async function toggleComplaintStatus(id){
   const list = APP_STATE.complaints.map(c=> c.id===id ? Object.assign({}, c, {status: (c.status==='resolved'?'pending':'resolved')}) : c);
@@ -1235,14 +1320,14 @@ document.getElementById('frTo').addEventListener('change', paintFeedbackReport);
 function paintFeedbackReport(){
   const list = getFilteredFeedback();
   document.getElementById('frStats').innerHTML = '<div><b>'+list.length+'</b><span>عدد الفيدباكات</span></div>';
-  const headers = ['التاريخ','اسم العميل','رقم التليفون','الطلب','ملاحظات','الإجراءات'];
+  const headers = ['التاريخ','اسم العميل','رقم التليفون','الطلب','تقييم الأكل','تقييم التوصيل','بتاكل منين في شبين','مفتقد ايه في شبين','مقترح','ملاحظات','الإجراءات'];
   const table = document.getElementById('frTable');
   const bodyRows = list.length ? list.map(f=>{
-    const cells = [fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), f.notes||''];
+    const cells = [fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), (f.foodRating?('★'.repeat(f.foodRating)):''), (f.deliveryRating?('★'.repeat(f.deliveryRating)):''), f.whereElse||'', f.missing||'', f.suggestion||'', f.notes||''];
     return '<tr>'+cells.map(c=>'<td>'+esc(c)+'</td>').join('')
       + '<td><button class="js-edit-fb" data-id="'+f.id+'" style="border:none;border-radius:8px;padding:6px 10px;font-size:11px;background:#EDE7DA;cursor:pointer;margin-left:5px;">تعديل</button>'
       + '<button class="js-del-fb" data-id="'+f.id+'" style="border:none;border-radius:8px;padding:6px 10px;font-size:11px;background:#F4D9D4;color:var(--bad);cursor:pointer;">حذف</button></td></tr>';
-  }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">مفيش بيانات في الفترة دي</td></tr>';
+  }).join('') : '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:20px;">مفيش بيانات في الفترة دي</td></tr>';
   table.innerHTML = '<thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+bodyRows+'</tbody>';
   document.querySelectorAll('.js-edit-fb').forEach(b=> b.addEventListener('click', ()=> openFeedbackEdit(b.getAttribute('data-id'))));
   document.querySelectorAll('.js-del-fb').forEach(b=> b.addEventListener('click', ()=> deleteFeedback(b.getAttribute('data-id'))));
@@ -1250,14 +1335,14 @@ function paintFeedbackReport(){
 (function(){ const _orig = renderFeedbackReport; renderFeedbackReport = function(){ _orig(); paintFeedbackReport(); }; })();
 function exportFeedbackExcel(){
   const list = getFilteredFeedback();
-  const headers = ['التاريخ','اسم العميل','رقم التليفون','الطلب','ملاحظات'];
-  const rows = list.map(f=>[fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), f.notes||'']);
+  const headers = ['التاريخ','اسم العميل','رقم التليفون','الطلب','تقييم الأكل','تقييم التوصيل','بتاكل منين في شبين','مفتقد ايه في شبين','مقترح','ملاحظات'];
+  const rows = list.map(f=>[fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), f.foodRating||'', f.deliveryRating||'', f.whereElse||'', f.missing||'', f.suggestion||'', f.notes||'']);
   exportRowsToExcel('تقرير-الفيدباك.xlsx', 'الفيدباك', headers, rows);
 }
 async function exportFeedbackPDF(){
   const list = getFilteredFeedback();
-  const headers = ['التاريخ','اسم العميل','رقم التليفون','الطلب','ملاحظات'];
-  const rows = list.map(f=>[fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), f.notes||'']);
+  const headers = ['التاريخ','اسم العميل','رقم التليفون','الطلب','تقييم الأكل','تقييم التوصيل','بتاكل منين في شبين','مفتقد ايه في شبين','مقترح','ملاحظات'];
+  const rows = list.map(f=>[fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), f.foodRating||'', f.deliveryRating||'', f.whereElse||'', f.missing||'', f.suggestion||'', f.notes||'']);
   await exportRowsToPDF('تقرير-الفيدباك.pdf', 'تقرير الفيدباك', headers, rows);
 }
 
