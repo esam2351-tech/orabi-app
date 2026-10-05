@@ -1195,25 +1195,60 @@ function paintComplaintsList(){
   document.querySelectorAll('.js-del-cp').forEach(b=> b.addEventListener('click', ()=> deleteComplaint(b.getAttribute('data-id'))));
   document.querySelectorAll('.js-share-cp').forEach(b=> b.addEventListener('click', ()=> shareComplaintWhatsApp(b.getAttribute('data-id'))));
 }
-function shareComplaintWhatsApp(id){
+function buildComplaintCardRow(icon, label, value, big){
+  if(!value) return '';
+  return '<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;">'
+    + '<div style="font-size:18px;flex-shrink:0;">'+icon+'</div>'
+    + '<div style="flex:1;"><b style="color:#fff;">'+esc(label)+':</b> <span style="color:#fff;'+(big?'text-decoration:underline;':'')+'">'+esc(value)+'</span></div>'
+    + '</div>';
+}
+async function shareComplaintWhatsApp(id){
   const c = allComplaintsCache.find(x=>x.id===id);
   if(!c) return;
   const r = RESTAURANTS[currentRestaurant];
   const st = c.status||'pending';
-  const lines = [
-    '📋 *شكوى عميل* — '+(r?r.name:''),
-    '',
-    '👤 *الاسم:* '+(c.customerName||'—'),
-    '📞 *الموبايل:* '+(c.phone||'—'),
-    '📅 *التاريخ:* '+fmtDate(c.date)
-  ];
-  if(c.product) lines.push('🛒 *الصنف:* '+c.product+(c.productDetails?' ('+c.productDetails+')':''));
-  lines.push('⚠️ *المشكلة:* '+(c.issue||'—'));
-  if(c.department) lines.push('🗂️ *القسم:* '+c.department);
-  if(c.action) lines.push('✅ *الإجراء المتخذ:* '+c.action);
-  lines.push('📌 *الحالة:* '+(st==='resolved'?'تم الحل':'قيد المتابعة'));
-  const msg = lines.join('\n');
-  window.open('https://wa.me/?text='+encodeURIComponent(msg), '_blank');
+  const container = document.createElement('div');
+  container.style.position = 'fixed'; container.style.top = '0'; container.style.left = '0';
+  container.style.opacity = '0'; container.style.pointerEvents = 'none'; container.style.zIndex = '-9999';
+  container.innerHTML = '<div style="width:420px;background:linear-gradient(180deg,#1F7A54,#145C40);direction:rtl;padding:24px 22px;box-sizing:border-box;font-family:Tajawal,sans-serif;font-size:15px;line-height:1.5;">'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">'
+      + '<div style="font-size:20px;">📋</div>'
+      + '<div style="color:#fff;font-family:Cairo,sans-serif;font-weight:900;font-size:17px;">شكوى عميل — '+esc(r?r.name:'')+'</div>'
+    + '</div>'
+    + buildComplaintCardRow('👤','الاسم', c.customerName||'—')
+    + buildComplaintCardRow('📞','الموبايل', c.phone||'—', true)
+    + buildComplaintCardRow('📅','التاريخ', fmtDate(c.date))
+    + (c.product ? buildComplaintCardRow('🛒','الصنف', c.product+(c.productDetails?' ('+c.productDetails+')':'')) : '')
+    + buildComplaintCardRow('⚠️','المشكلة', c.issue||'—')
+    + (c.department ? buildComplaintCardRow('🗂️','القسم', c.department) : '')
+    + (c.action ? buildComplaintCardRow('✅','الإجراء المتخذ', c.action) : '')
+    + buildComplaintCardRow('📌','الحالة', st==='resolved'?'تم الحل':'قيد المتابعة')
+    + '</div>';
+  document.body.appendChild(container);
+  try{
+    if(document.fonts && document.fonts.ready){ await document.fonts.ready.catch(()=>{}); }
+    const canvas = await html2canvas(container.firstElementChild, {scale:2.5, backgroundColor:'#1F7A54', useCORS:true});
+    container.remove();
+    const blob = await new Promise(res=> canvas.toBlob(res, 'image/png', 1.0));
+    if(!blob){ throw new Error('no-blob'); }
+    const fileName = 'complaint-'+(c.id||Date.now())+'.png';
+    const file = new File([blob], fileName, {type:'image/png'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title:'شكوى عميل'});
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fileName;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=> URL.revokeObjectURL(url), 5000);
+      toast('تم تنزيل صورة الشكوى، افتح واتساب وارفقها للجروب أو الشخص اللي عايز تبعتله');
+      window.open('https://wa.me/', '_blank');
+    }
+  }catch(e){
+    container.remove();
+    if(e && e.name === 'AbortError') return;
+    toast('تعذّر إنشاء صورة الشكوى، حاول تاني');
+  }
 }
 async function toggleComplaintStatus(id){
   const list = APP_STATE.complaints.map(c=> c.id===id ? Object.assign({}, c, {status: (c.status==='resolved'?'pending':'resolved')}) : c);
