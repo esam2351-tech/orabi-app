@@ -1061,15 +1061,29 @@ async function saveFeedbackForm(){
   const missing = document.getElementById('fb_missing').value.trim();
   const suggestion = document.getElementById('fb_suggestion').value.trim();
   const list = APP_STATE.feedback.slice();
+  let prevSuggestion = '';
   if(editingFeedbackId){
     const idx = list.findIndex(f=>f.id===editingFeedbackId);
-    if(idx>-1) list[idx] = Object.assign({}, list[idx], {customerName:name, phone:normalizePhone(phone), orderItems, notes, foodRating, deliveryRating, whereElse, missing, suggestion});
+    if(idx>-1){
+      prevSuggestion = list[idx].suggestion || '';
+      list[idx] = Object.assign({}, list[idx], {customerName:name, phone:normalizePhone(phone), orderItems, notes, foodRating, deliveryRating, whereElse, missing, suggestion});
+    }
   } else {
     const entry = {id:uid(), customerName:name, phone:normalizePhone(phone), orderItems, notes, foodRating, deliveryRating, whereElse, missing, suggestion, date:new Date().toISOString(), restaurant:currentRestaurant};
     list.push(entry);
     editingFeedbackId = entry.id;
   }
   await saveFeedback(list);
+  /* لو العميل كتب مقترح في الفيدباك، يتسجل تلقائي في قائمة المقترحات (مرة واحدة فقط لكل نص مختلف) */
+  if(suggestion && suggestion !== prevSuggestion){
+    const sgList = APP_STATE.suggestions.slice();
+    sgList.push({
+      id: uid(), date: new Date().toISOString(), submitter: name, description: suggestion,
+      staff: currentStaff ? currentStaff.name : 'غير معروف', status:'review', restaurant: currentRestaurant,
+      fromFeedback: true
+    });
+    await saveSuggestions(sgList);
+  }
   return true;
 }
 document.getElementById('fbSaveBtn').addEventListener('click', async ()=>{
@@ -1293,6 +1307,7 @@ function paintSuggestionsList(){
     return '<div class="complaintcard">'
       + '<div class="ctop"><div><h4>'+esc(s.submitter||'—')+'</h4><small>'+fmtDate(s.date)+(s.staff?' — سجّله: '+esc(s.staff):'')+'</small></div>'
       + '<span class="badge '+(implemented?'resolved':'pending')+'">'+(implemented?'تم التنفيذ':'تحت الدراسة')+'</span></div>'
+      + (s.fromFeedback ? '<div style="background:#FBF0DD;color:#7A5A22;font-size:10.5px;font-weight:800;padding:4px 10px;border-radius:8px;display:inline-block;margin-bottom:8px;">💬 محال من الفيدباك</div>' : '')
       + '<div class="crow">'+esc(s.description||'—')+'</div>'
       + '<div class="cbtnrow">'
       + '<button style="background:'+(implemented?'#FBE7CF':'#DCEFE0')+';color:'+(implemented?'#A65B12':'#2E7D45')+';" class="js-toggle-sg" data-id="'+s.id+'">'+(implemented?'↩️ رجوع لتحت الدراسة':'✓ تحديد كمنفّذ')+'</button>'
