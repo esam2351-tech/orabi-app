@@ -132,10 +132,6 @@
   .chip-select.active{background:var(--primary);color:var(--on-primary);border-color:var(--primary);}
   .chip-select input{display:none;}
 
-  .star-rating{display:flex;gap:6px;font-size:28px;line-height:1;}
-  .star-rating span{color:#E3DACA;cursor:pointer;transition:color .1s;}
-  .star-rating span.on{color:#F0A93A;}
-
   .ingredient-editrow{display:flex;gap:8px;margin-bottom:8px;align-items:center;}
   .ingredient-editrow input{flex:1;}
   .ingredient-editrow .rm{width:34px;height:34px;border-radius:9px;border:none;background:#F4D9D4;color:var(--bad);font-size:15px;cursor:pointer;flex-shrink:0;}
@@ -404,18 +400,8 @@
       </div>
       <div class="card">
         <h3>تقييم الزيارة</h3>
-        <div class="field">
-          <label>الأكل</label>
-          <div class="star-rating" id="fb_foodStars" data-value="0">
-            <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
-          </div>
-        </div>
-        <div class="field">
-          <label>التوصيل</label>
-          <div class="star-rating" id="fb_deliveryStars" data-value="0">
-            <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
-          </div>
-        </div>
+        <div class="field"><label>الأكل</label><input id="fb_foodText" placeholder="رأي العميل في الأكل..."></div>
+        <div class="field"><label>التوصيل</label><input id="fb_deliveryText" placeholder="رأي العميل في التوصيل..."></div>
         <div class="field"><label>بتاكل منين في شبين؟</label><input id="fb_whereElse" placeholder="اسم المطعم أو المكان..."></div>
         <div class="field"><label>مفتقد ايه في شبين؟</label><input id="fb_missing" placeholder="حاجة حاسس إنها ناقصة في شبين..."></div>
         <div class="field"><label>عندك اقتراح؟</label><input id="fb_suggestion" placeholder="أي اقتراح من العميل..."></div>
@@ -961,37 +947,11 @@ function renderFeedbackForm(){
   document.getElementById('fb_whereElse').value = '';
   document.getElementById('fb_missing').value = '';
   document.getElementById('fb_suggestion').value = '';
-  setStarRating('fb_foodStars', 0);
-  setStarRating('fb_deliveryStars', 0);
+  document.getElementById('fb_foodText').value = '';
+  document.getElementById('fb_deliveryText').value = '';
   fbSelectedItems = new Set();
   renderFbChips();
 }
-function setStarRating(containerId, value){
-  const box = document.getElementById(containerId);
-  if(!box) return;
-  box.setAttribute('data-value', String(value));
-  box.querySelectorAll('span').forEach(sp=>{
-    const v = parseInt(sp.getAttribute('data-v'),10);
-    sp.classList.toggle('on', v<=value);
-  });
-}
-function getStarRating(containerId){
-  const box = document.getElementById(containerId);
-  if(!box) return 0;
-  return parseInt(box.getAttribute('data-value')||'0',10);
-}
-function initStarRatingWidget(containerId){
-  const box = document.getElementById(containerId);
-  if(!box) return;
-  box.querySelectorAll('span').forEach(sp=>{
-    sp.addEventListener('click', ()=>{
-      const v = parseInt(sp.getAttribute('data-v'),10);
-      setStarRating(containerId, v);
-    });
-  });
-}
-initStarRatingWidget('fb_foodStars');
-initStarRatingWidget('fb_deliveryStars');
 function openNewFeedback(){
   editingFeedbackId = null;
   feedbackReturnScreen = 'home';
@@ -1012,8 +972,8 @@ function openFeedbackEdit(id){
   document.getElementById('fb_whereElse').value = f.whereElse||'';
   document.getElementById('fb_missing').value = f.missing||'';
   document.getElementById('fb_suggestion').value = f.suggestion||'';
-  setStarRating('fb_foodStars', f.foodRating||0);
-  setStarRating('fb_deliveryStars', f.deliveryRating||0);
+  document.getElementById('fb_foodText').value = f.foodNote||'';
+  document.getElementById('fb_deliveryText').value = f.deliveryNote||'';
   fbSelectedItems = new Set((f.orderItems||[]).map(o=>o.id));
   renderFbChips();
   document.getElementById('feedbackScreenTitle').textContent = 'تعديل فيدباك';
@@ -1055,8 +1015,8 @@ async function saveFeedbackForm(){
   if(!name || !phone){ toast('اكتب اسم العميل ورقم التليفون'); return false; }
   const orderItems = APP_STATE.menu.filter(m=>fbSelectedItems.has(m.id)).map(m=>({id:m.id, name:m.name}));
   const notes = document.getElementById('fb_notes').value.trim();
-  const foodRating = getStarRating('fb_foodStars');
-  const deliveryRating = getStarRating('fb_deliveryStars');
+  const foodNote = document.getElementById('fb_foodText').value.trim();
+  const deliveryNote = document.getElementById('fb_deliveryText').value.trim();
   const whereElse = document.getElementById('fb_whereElse').value.trim();
   const missing = document.getElementById('fb_missing').value.trim();
   const suggestion = document.getElementById('fb_suggestion').value.trim();
@@ -1066,10 +1026,10 @@ async function saveFeedbackForm(){
     const idx = list.findIndex(f=>f.id===editingFeedbackId);
     if(idx>-1){
       prevSuggestion = list[idx].suggestion || '';
-      list[idx] = Object.assign({}, list[idx], {customerName:name, phone:normalizePhone(phone), orderItems, notes, foodRating, deliveryRating, whereElse, missing, suggestion});
+      list[idx] = Object.assign({}, list[idx], {customerName:name, phone:normalizePhone(phone), orderItems, notes, foodNote, deliveryNote, whereElse, missing, suggestion});
     }
   } else {
-    const entry = {id:uid(), customerName:name, phone:normalizePhone(phone), orderItems, notes, foodRating, deliveryRating, whereElse, missing, suggestion, date:new Date().toISOString(), restaurant:currentRestaurant};
+    const entry = {id:uid(), customerName:name, phone:normalizePhone(phone), orderItems, notes, foodNote, deliveryNote, whereElse, missing, suggestion, date:new Date().toISOString(), restaurant:currentRestaurant};
     list.push(entry);
     editingFeedbackId = entry.id;
   }
@@ -1373,7 +1333,7 @@ function paintFeedbackReport(){
   const headers = ['التاريخ','اسم العميل','رقم التليفون','الطلب','تقييم الأكل','تقييم التوصيل','بتاكل منين في شبين','مفتقد ايه في شبين','مقترح','ملاحظات','الإجراءات'];
   const table = document.getElementById('frTable');
   const bodyRows = list.length ? list.map(f=>{
-    const cells = [fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), (f.foodRating?('★'.repeat(f.foodRating)):''), (f.deliveryRating?('★'.repeat(f.deliveryRating)):''), f.whereElse||'', f.missing||'', f.suggestion||'', f.notes||''];
+    const cells = [fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), f.foodNote||'', f.deliveryNote||'', f.whereElse||'', f.missing||'', f.suggestion||'', f.notes||''];
     return '<tr>'+cells.map(c=>'<td>'+esc(c)+'</td>').join('')
       + '<td><button class="js-edit-fb" data-id="'+f.id+'" style="border:none;border-radius:8px;padding:6px 10px;font-size:11px;background:#EDE7DA;cursor:pointer;margin-left:5px;">تعديل</button>'
       + '<button class="js-del-fb" data-id="'+f.id+'" style="border:none;border-radius:8px;padding:6px 10px;font-size:11px;background:#F4D9D4;color:var(--bad);cursor:pointer;">حذف</button></td></tr>';
@@ -1386,13 +1346,13 @@ function paintFeedbackReport(){
 function exportFeedbackExcel(){
   const list = getFilteredFeedback();
   const headers = ['التاريخ','اسم العميل','رقم التليفون','الطلب','تقييم الأكل','تقييم التوصيل','بتاكل منين في شبين','مفتقد ايه في شبين','مقترح','ملاحظات'];
-  const rows = list.map(f=>[fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), f.foodRating||'', f.deliveryRating||'', f.whereElse||'', f.missing||'', f.suggestion||'', f.notes||'']);
+  const rows = list.map(f=>[fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), f.foodNote||'', f.deliveryNote||'', f.whereElse||'', f.missing||'', f.suggestion||'', f.notes||'']);
   exportRowsToExcel('تقرير-الفيدباك.xlsx', 'الفيدباك', headers, rows);
 }
 async function exportFeedbackPDF(){
   const list = getFilteredFeedback();
   const headers = ['التاريخ','اسم العميل','رقم التليفون','الطلب','تقييم الأكل','تقييم التوصيل','بتاكل منين في شبين','مفتقد ايه في شبين','مقترح','ملاحظات'];
-  const rows = list.map(f=>[fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), f.foodRating||'', f.deliveryRating||'', f.whereElse||'', f.missing||'', f.suggestion||'', f.notes||'']);
+  const rows = list.map(f=>[fmtDate(f.date), f.customerName, f.phone, (f.orderItems||[]).map(o=>o.name).join('، '), f.foodNote||'', f.deliveryNote||'', f.whereElse||'', f.missing||'', f.suggestion||'', f.notes||'']);
   await exportRowsToPDF('تقرير-الفيدباك.pdf', 'تقرير الفيدباك', headers, rows);
 }
 
